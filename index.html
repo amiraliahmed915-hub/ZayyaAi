@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gemini AI Chat</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; background: #10131c; color: #f5f6fa; }
+    header { padding: 16px; background: #191e2c; border-bottom: 1px solid #30384b; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    h1 { margin: 0; font-size: 21px; }
+    #chat { max-width: 850px; margin: auto; padding: 18px; height: calc(100dvh - 178px); overflow-y: auto; }
+    .msg { padding: 13px 16px; margin: 12px 0; border-radius: 16px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .user { background: #284e86; margin-left: 28px; }
+    .bot { background: #222939; margin-right: 18px; }
+    form { position: fixed; bottom: 0; width: 100%; padding: 12px; background: #191e2c; border-top: 1px solid #30384b; }
+    .controls { max-width: 850px; margin: auto; display: flex; gap: 8px; align-items: center; }
+    input[type=text] { min-width: 0; flex: 1; padding: 14px; border-radius: 12px; border: 1px solid #454d60; background: #10131c; color: white; }
+    button, .file-label { border: 0; border-radius: 10px; padding: 12px; cursor: pointer; background: #527cf4; color: white; font-size: 14px; }
+    button:disabled { opacity: .55; cursor: wait; }
+    #file { display: none; }
+    #filename, #status { max-width: 850px; margin: 6px auto 0; color: #c6cee0; font-size: 12px; }
+    @media (max-width: 520px) { .controls { flex-wrap: wrap; } input[type=text] { flex-basis: 55%; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>✨ Gemini AI</h1>
+    <button id="clear" type="button">New chat</button>
+  </header>
+
+  <main id="chat" aria-live="polite">
+    <div class="msg bot">Hello! 👋 Ask me anything in your language. You can also attach an image or document.</div>
+  </main>
+  <div id="status" role="status"></div>
+
+  <form id="form">
+    <div class="controls">
+      <label class="file-label" for="file">📎 File</label>
+      <input id="file" type="file" accept=".png,.jpg,.jpeg,.webp,.pdf,.txt">
+      <input id="message" type="text" placeholder="Ask Gemini anything..." autocomplete="off">
+      <button id="send" type="submit">Send</button>
+    </div>
+    <div id="filename"></div>
+  </form>
+
+  <script>
+    const chat = document.getElementById("chat");
+    const form = document.getElementById("form");
+    const message = document.getElementById("message");
+    const file = document.getElementById("file");
+    const statusBox = document.getElementById("status");
+    const send = document.getElementById("send");
+
+    function addMessage(text, who) {
+      const el = document.createElement("div");
+      el.className = "msg " + who;
+      el.textContent = text;
+      chat.appendChild(el);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    file.addEventListener("change", () => {
+      document.getElementById("filename").textContent =
+        file.files.length ? "Selected: " + file.files[0].name : "";
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const text = message.value.trim();
+      const attachment = file.files[0];
+      if (!text && !attachment) return;
+
+      if (attachment && attachment.size > 10 * 1024 * 1024) {
+        statusBox.textContent = "File must be 10 MB or smaller.";
+        return;
+      }
+
+      if (text) addMessage(text, "user");
+      if (attachment) addMessage("📎 " + attachment.name, "user");
+
+      const data = new FormData();
+      data.append("message", text);
+      if (attachment) data.append("file", attachment);
+
+      message.value = "";
+      file.value = "";
+      document.getElementById("filename").textContent = "";
+      send.disabled = true;
+      statusBox.textContent = "Gemini is thinking...";
+
+      try {
+        const res = await fetch("/chat", { method: "POST", body: data });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || "Request failed");
+        addMessage(result.reply, "bot");
+        statusBox.textContent = "";
+      } catch (err) {
+        statusBox.textContent = err.message;
+      } finally {
+        send.disabled = false;
+        message.focus();
+      }
+    });
+
+    document.getElementById("clear").addEventListener("click", async () => {
+      try {
+        const res = await fetch("/clear", { method: "POST" });
+        if (!res.ok) throw new Error("Could not clear chat.");
+        chat.replaceChildren();
+        addMessage("New conversation started! 👋", "bot");
+        statusBox.textContent = "";
+      } catch (err) {
+        statusBox.textContent = err.message;
+      }
+    });
+  </script>
+</body>
+</html>
